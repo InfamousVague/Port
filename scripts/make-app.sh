@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 APP="$ROOT/Port.app"
 SRC_ICON="$ROOT/art/AppIcon-source.png"
-VERSION="0.1.3"
+VERSION="0.1.4"
 # Same Developer ID as Blip ("Matt Wisniewski, F6ZAL7ANAD"). Override with
 # SIGN_IDENTITY=- for an ad-hoc local build.
 SIGN_IDENTITY="${SIGN_IDENTITY:-0948896DC970503ADEF5B5070E0BB3E9D9047757}"
@@ -50,6 +50,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>Port</string>
   <key>CFBundleIdentifier</key><string>com.mattssoftware.port</string>
   <key>CFBundleExecutable</key><string>Port</string>
+  <key>CFBundleURLTypes</key>
+  <array><dict>
+    <key>CFBundleURLName</key><string>com.mattssoftware.port</string>
+    <key>CFBundleURLSchemes</key><array><string>port</string></array>
+  </dict></array>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
