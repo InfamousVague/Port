@@ -174,24 +174,25 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 10) {
             Button {
                 store.refresh()
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-                    .font(.system(size: 11))
+                Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(.plain)
+            .controlSize(.small)
+            .help("Refresh")
             Spacer()
-            Button("Quit Port") {
+            Button {
                 NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
             }
-            .font(.system(size: 11))
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .controlSize(.small)
+            .help("Quit Port")
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
     }
 
     private func confirmKill(_ port: OpenPort) {
