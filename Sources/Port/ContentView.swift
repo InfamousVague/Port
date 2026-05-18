@@ -109,6 +109,7 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .glassScrollers()
                 }
             }
             .frame(maxHeight: .infinity)
