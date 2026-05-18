@@ -40,6 +40,14 @@ final class PortStore {
     var externalIP: String?
     var mappings: [ExternalMapping] = []
     var lastError: String?
+    /// "proto:port" the user asked to jump to (set from a notification click).
+    var focusedPortKey: String?
+    /// "proto:port" -> user label. Trusted ports don't notify on (re)appear.
+    var trusted: [String: String] = [:]
+
+    @ObservationIgnored private var seenPortKeys: Set<String> = []
+    @ObservationIgnored private var firstScanDone = false
+    @ObservationIgnored private let trustDefaultsKey = "trustedPorts.v1"
 
     static let blipBundleID = "com.infamousvague.blip"
     // GitHub Pages mirror of the mattssoftware site (the custom domain is
@@ -54,6 +62,7 @@ final class PortStore {
     @ObservationIgnored private var timer: Timer?
 
     func start() {
+        loadTrust()
         let addr = LocalAddress.current()
         hostname = addr.hostname
         primaryIP = addr.primary ?? "offline"
@@ -149,7 +158,58 @@ final class PortStore {
     func refresh() {
         Task.detached {
             let scanned = PortScanner.scan()
-            await MainActor.run { self.ports = scanned }
+            await MainActor.run { self.applyScan(scanned) }
+        }
+    }
+
+    private func applyScan(_ scanned: [OpenPort]) {
+        ports = scanned
+        let current = Set(scanned.map { "\($0.proto):\($0.port)" })
+        if firstScanDone {
+            // Trusted ports are vetted by the user — never notify on them.
+            let newKeys = current.subtracting(seenPortKeys)
+                .filter { trusted[$0] == nil }
+            if newKeys.count > 5 {
+                Notifier.postSummary(count: newKeys.count)
+            } else {
+                for p in scanned where newKeys.contains("\(p.proto):\(p.port)") {
+                    Notifier.postNewPort(
+                        key: "\(p.proto):\(p.port)",
+                        port: p.port,
+                        proto: p.proto,
+                        process: p.process,
+                        service: KnownPorts.name(p.port)
+                    )
+                }
+            }
+        }
+        seenPortKeys = current
+        firstScanDone = true
+    }
+
+    // MARK: - Trust
+
+    func setTrust(key: String, label: String) {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        trusted[key] = trimmed.isEmpty ? "Trusted" : trimmed
+        persistTrust()
+    }
+
+    func untrust(key: String) {
+        trusted.removeValue(forKey: key)
+        persistTrust()
+    }
+
+    private func loadTrust() {
+        guard let data = UserDefaults.standard.data(forKey: trustDefaultsKey),
+              let map = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return }
+        trusted = map
+    }
+
+    private func persistTrust() {
+        if let data = try? JSONEncoder().encode(trusted) {
+            UserDefaults.standard.set(data, forKey: trustDefaultsKey)
         }
     }
 

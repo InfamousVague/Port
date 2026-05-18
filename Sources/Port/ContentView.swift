@@ -15,7 +15,6 @@ struct ContentView: View {
             footer
         }
         .frame(width: 380, height: 598)
-        .task { store.start() }
         .sheet(item: $forwardTarget) { port in
             ForwardSheet(source: port) { lh, lp, th, tp, mapExternally, extPort in
                 store.startForward(listenHost: lh, listenPort: lp, targetHost: th, targetPort: tp)
@@ -76,36 +75,51 @@ struct ContentView: View {
     }
 
     private var list: some View {
-        ScrollView {
-            if !store.forwards.isEmpty {
-                forwardsStrip
-            }
-            if !store.mappings.isEmpty {
-                mappingsStrip
-            }
-            if store.ports.isEmpty {
-                Text("No listening ports found.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 200)
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(store.ports.enumerated()), id: \.element.id) { index, port in
-                        PortRow(
-                            port: port,
-                            paused: store.pausedPIDs.contains(port.pid),
-                            onKill: { confirmKill(port) },
-                            onPause: { store.togglePause(port) },
-                            onForward: { forwardTarget = port }
-                        )
-                        if index < store.ports.count - 1 {
-                            Divider()
+        ScrollViewReader { proxy in
+            ScrollView {
+                if !store.forwards.isEmpty {
+                    forwardsStrip
+                }
+                if !store.mappings.isEmpty {
+                    mappingsStrip
+                }
+                if store.ports.isEmpty {
+                    Text("No listening ports found.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(store.ports.enumerated()), id: \.element.id) { index, port in
+                            let key = "\(port.proto):\(port.port)"
+                            PortRow(
+                                port: port,
+                                paused: store.pausedPIDs.contains(port.pid),
+                                highlighted: store.focusedPortKey == key,
+                                trustedLabel: store.trusted[key],
+                                onKill: { confirmKill(port) },
+                                onPause: { store.togglePause(port) },
+                                onForward: { forwardTarget = port },
+                                onTrust: { promptTrust(port, key: key) },
+                                onUntrust: { store.untrust(key: key) }
+                            )
+                            .id(key)
+                            if index < store.ports.count - 1 {
+                                Divider()
+                            }
                         }
                     }
                 }
             }
+            .frame(maxHeight: .infinity)
+            .onChange(of: store.focusedPortKey) { _, key in
+                guard let key else { return }
+                withAnimation { proxy.scrollTo(key, anchor: .center) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    if store.focusedPortKey == key { store.focusedPortKey = nil }
+                }
+            }
         }
-        .frame(maxHeight: .infinity)
     }
 
     private var forwardsStrip: some View {
@@ -190,14 +204,40 @@ struct ContentView: View {
             store.kill(port)
         }
     }
+
+    private func promptTrust(_ port: OpenPort, key: String) {
+        let alert = NSAlert()
+        alert.messageText = "Trust \(port.proto.uppercased()) port \(port.port)?"
+        alert.informativeText = "Trusted ports won't trigger \"new port\" notifications. Give it a label:"
+        alert.addButton(withTitle: store.trusted[key] == nil ? "Trust" : "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.stringValue = store.trusted[key]
+            ?? KnownPorts.name(port.port)
+            ?? port.process
+        field.placeholderString = "e.g. My dev server"
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            store.setTrust(key: key, label: field.stringValue)
+        }
+    }
 }
 
 private struct PortRow: View {
     let port: OpenPort
     let paused: Bool
+    let highlighted: Bool
+    let trustedLabel: String?
     let onKill: () -> Void
     let onPause: () -> Void
     let onForward: () -> Void
+    let onTrust: () -> Void
+    let onUntrust: () -> Void
+
+    private var service: String? { KnownPorts.name(port.port) }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -212,8 +252,30 @@ private struct PortRow: View {
                 .foregroundStyle(port.proto == "tcp" ? Color.accentColor : Color.secondary)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(port.address):\(port.port)")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                HStack(spacing: 6) {
+                    Text("\(port.address):\(port.port)")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    if let service {
+                        Text(service)
+                            .font(.system(size: 9, weight: .medium))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.accentColor.opacity(0.15))
+                            .foregroundStyle(.tint)
+                            .clipShape(Capsule())
+                    }
+                    if let trustedLabel {
+                        Label(trustedLabel, systemImage: "checkmark.seal.fill")
+                            .labelStyle(.titleAndIcon)
+                            .font(.system(size: 9, weight: .semibold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.18))
+                            .foregroundStyle(.green)
+                            .clipShape(Capsule())
+                            .lineLimit(1)
+                    }
+                }
                 Text("\(port.process)  ·  pid \(port.pid)\(paused ? "  ·  paused" : "")")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -224,6 +286,13 @@ private struct PortRow: View {
                 Button("Forward…", action: onForward)
                 Button(paused ? "Resume" : "Pause", action: onPause)
                 Divider()
+                if trustedLabel == nil {
+                    Button("Trust This Port…", action: onTrust)
+                } else {
+                    Button("Edit Trust Label…", action: onTrust)
+                    Button("Untrust", action: onUntrust)
+                }
+                Divider()
                 Button("Kill", role: .destructive, action: onKill)
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -233,6 +302,8 @@ private struct PortRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
+        .background(highlighted ? Color.accentColor.opacity(0.18) : Color.clear)
+        .animation(.easeInOut(duration: 0.25), value: highlighted)
         .contentShape(Rectangle())
     }
 }

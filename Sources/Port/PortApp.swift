@@ -1,19 +1,15 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 @main
 struct PortApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @State private var store = PortStore()
 
     var body: some Scene {
-        MenuBarExtra {
-            ContentView()
-                .environment(store)
-        } label: {
-            Image(nsImage: PortApp.menuBarIcon)
-        }
-        .menuBarExtraStyle(.window)
+        // Accessory app: the real UI is the NSStatusItem/NSPopover the
+        // delegate manages. This scene stays empty/never shown.
+        Settings { EmptyView() }
     }
 
     /// Resolve a bundled resource: Bundle.main (signed .app, flattened into
@@ -52,9 +48,67 @@ struct PortApp: App {
     }()
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    let store = PortStore()
+    private var statusItem: NSStatusItem!
+    private let popover = NSPopover()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Menu-bar agent: no Dock icon, no main window.
         NSApp.setActivationPolicy(.accessory)
+
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem.button {
+            button.image = PortApp.menuBarIcon
+            button.action = #selector(togglePopover(_:))
+            button.target = self
+        }
+
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(
+            rootView: ContentView().environment(store)
+        )
+
+        store.start()
+
+        UNUserNotificationCenter.current().delegate = self
+        Notifier.requestAuthorization()
+    }
+
+    @objc private func togglePopover(_ sender: Any?) {
+        if popover.isShown {
+            popover.performClose(sender)
+        } else {
+            showPopover()
+        }
+    }
+
+    private func showPopover() {
+        guard let button = statusItem.button else { return }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let key = response.notification.request.content.userInfo["portKey"] as? String
+        DispatchQueue.main.async {
+            self.store.focusedPortKey = key
+            self.showPopover()
+        }
+        completionHandler()
     }
 }

@@ -95,6 +95,8 @@ private struct ConnectionPin: View {
 
     private var helpText: String {
         var s = "\(connection.process) → \(connection.remoteAddress):\(connection.remotePort)"
+        if let known = KnownIPs.label(connection.remoteAddress) { s += "  ·  \(known)" }
+        if let svc = KnownPorts.name(connection.remotePort) { s += "  ·  \(svc)" }
         if let city = connection.city { s += "  ·  \(city)" }
         if let country = connection.country { s += ", \(country)" }
         return s
