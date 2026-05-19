@@ -14,7 +14,7 @@ enum Notifier {
         var who = process
         if let service { who += "  ·  \(service)" }
         content.body = "\(who). Click to view it in Port."
-        content.userInfo = ["portKey": key]
+        content.userInfo = ["portKey": key, "suitePane": "port", "suiteFocus": key]
         send(id: "port-\(key)", content: content)
     }
 

@@ -36,6 +36,17 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 # nested code bundle, so flatten its resources into Contents/Resources
 # (loaded via Bundle.main in the .app; Bundle.module still serves `swift run`).
 cp "$BIN/Port" "$APP/Contents/MacOS/Port"
+
+# ── Embed + (below) sign the SuiteKit contract and this
+# app's pane dylib so the MattsSoftware launcher can load
+# the SAME code out of this installed .app. rpath lets the
+# bundled exe find them under Contents/Frameworks.
+mkdir -p "$APP/Contents/Frameworks"
+cp "$BIN/libSuiteKit.dylib" "$APP/Contents/Frameworks/"
+cp "$BIN/libPortPane.dylib" "$APP/Contents/Frameworks/"
+if [ -d "$BIN/Port_PortPane.bundle" ]; then find "$BIN/Port_PortPane.bundle" -type f \( -name '*.png' -o -name '*.icns' \) -exec cp {} "$APP/Contents/Resources/" \; ; fi
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Port" 2>/dev/null || true
+
 if [ -d "$BIN/Port_Port.bundle" ]; then
   find "$BIN/Port_Port.bundle" -type f \( -name '*.png' -o -name '*.icns' \) \
     -exec cp {} "$APP/Contents/Resources/" \;
@@ -81,6 +92,10 @@ PLIST
 # Sign with the Developer ID (hardened runtime, distribution-ready).
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
   # Inside-out, no --deep (SwiftPM resource bundle is sealed as a resource).
+  codesign --force --options runtime --timestamp \
+    --sign "$SIGN_IDENTITY" "$APP/Contents/Frameworks/libSuiteKit.dylib"
+  codesign --force --options runtime --timestamp \
+    --sign "$SIGN_IDENTITY" "$APP/Contents/Frameworks/libPortPane.dylib"
   codesign --force --options runtime --timestamp \
     --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/Port"
   codesign --force --options runtime --timestamp \

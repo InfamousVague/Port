@@ -14,7 +14,7 @@ struct ContentView: View {
             Divider()
             footer
         }
-        .frame(width: 380, height: 598)
+        .frame(width: 340, height: 540)
         .sheet(item: $forwardTarget) { port in
             ForwardSheet(source: port) { lh, lp, th, tp, mapExternally, extPort in
                 store.startForward(listenHost: lh, listenPort: lp, targetHost: th, targetPort: tp)
@@ -31,7 +31,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(alignment: .center, spacing: 6) {
-                Image(nsImage: PortApp.appIcon)
+                Image(nsImage: PortBrand.appIcon)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: 18, height: 18)
@@ -39,7 +39,6 @@ struct ContentView: View {
                 Text("PORT")
                     .font(.system(size: 13, weight: .semibold))
                     .tracking(2)
-                LiveDot()
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {
