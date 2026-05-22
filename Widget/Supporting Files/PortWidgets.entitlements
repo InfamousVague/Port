@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PortWidgets extension entitlements. Sandboxed (pkd rejects un-
+  sandboxed plug-ins as "mis-configured") + the shared App Group so
+  the widget's TimelineProvider can read SharedPort from the Group
+  Container the host writes after each refresh.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>F6ZAL7ANAD.group.com.mattssoftware.port</string>
+  </array>
+</dict>
+</plist>

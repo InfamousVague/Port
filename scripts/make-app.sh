@@ -52,6 +52,41 @@ if [ -d "$BIN/Port_Port.bundle" ]; then
     -exec cp {} "$APP/Contents/Resources/" \;
 fi
 
+# ── Widget extension (.appex) ─────────────────────────────────────
+# Built by Xcode, not SwiftPM (SR-14944 — SwiftPM has no
+# app-extension productType, so ExtensionFoundation fatal-errors at
+# launch). Widget consumes PortShared via local-package dep so it
+# shares the App Group + SharedPort model with the host.
+# SKIP_WIDGET=1 to skip during fast iteration.
+if [ "${SKIP_WIDGET:-0}" != "1" ]; then
+  if command -v xcodegen >/dev/null; then
+    ( cd "$ROOT/Widget" && xcodegen generate --quiet )
+  fi
+  echo "› xcodebuild PortWidgets.appex"
+  XCB_OUT="$ROOT/.build/xcode"
+  xcodebuild \
+    -project "$ROOT/Widget/PortWidgets.xcodeproj" \
+    -scheme PortWidgets \
+    -configuration Release \
+    -derivedDataPath "$XCB_OUT" \
+    MARKETING_VERSION="$VERSION" \
+    CURRENT_PROJECT_VERSION="$VERSION" \
+    CODE_SIGN_IDENTITY="-" \
+    CODE_SIGNING_REQUIRED=NO \
+    CODE_SIGNING_ALLOWED=NO \
+    -quiet \
+    build
+  WIDGET_APPEX="$XCB_OUT/Build/Products/Release/PortWidgets.appex"
+  if [ -d "$WIDGET_APPEX" ]; then
+    mkdir -p "$APP/Contents/PlugIns"
+    rm -rf "$APP/Contents/PlugIns/PortWidgets.appex"
+    ditto "$WIDGET_APPEX" "$APP/Contents/PlugIns/PortWidgets.appex"
+    echo "✓ embedded $APP/Contents/PlugIns/PortWidgets.appex"
+  else
+    echo "⚠ widget build produced no .appex at $WIDGET_APPEX"
+  fi
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -89,16 +124,32 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Sign with the Developer ID (hardened runtime, distribution-ready).
+# Inside-out signing (dylibs → widget exe + bundle → host exe + bundle).
+# Host needs the App Group entitlement so SharedPortStore.write can
+# resolve the Group Container URL; widget needs sandbox + the same
+# group. Drift between the two entitlements files is a silent failure.
+HOST_ENT="$ROOT/Port.entitlements"
+WIDGET_ENT="$ROOT/Widget/Supporting Files/PortWidgets.entitlements"
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
-  # Inside-out, no --deep (SwiftPM resource bundle is sealed as a resource).
   codesign --force --options runtime --timestamp \
     --sign "$SIGN_IDENTITY" "$APP/Contents/Frameworks/libSuiteKit.dylib"
   codesign --force --options runtime --timestamp \
     --sign "$SIGN_IDENTITY" "$APP/Contents/Frameworks/libPortPane.dylib"
+  if [ -d "$APP/Contents/PlugIns/PortWidgets.appex" ]; then
+    codesign --force --options runtime --timestamp \
+      --entitlements "$WIDGET_ENT" \
+      --sign "$SIGN_IDENTITY" \
+      "$APP/Contents/PlugIns/PortWidgets.appex/Contents/MacOS/PortWidgets"
+    codesign --force --options runtime --timestamp \
+      --entitlements "$WIDGET_ENT" \
+      --sign "$SIGN_IDENTITY" \
+      "$APP/Contents/PlugIns/PortWidgets.appex"
+  fi
   codesign --force --options runtime --timestamp \
+    --entitlements "$HOST_ENT" \
     --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/Port"
   codesign --force --options runtime --timestamp \
+    --entitlements "$HOST_ENT" \
     --sign "$SIGN_IDENTITY" "$APP"
   codesign --verify --strict --verbose=1 "$APP" && echo "✓ signed: $SIGN_IDENTITY"
 else

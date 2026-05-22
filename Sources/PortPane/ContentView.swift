@@ -8,11 +8,13 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .frame(height: 46)
             mapCard
             Divider()
             list
             Divider()
             footer
+                .frame(height: 46)
         }
         .frame(width: 340, height: 540)
         .sheet(item: $forwardTarget) { port in
@@ -63,9 +65,9 @@ struct ContentView: View {
         ConnectionsMapView()
             .frame(height: 188)
             .background(Color.black.opacity(0.15))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
             .padding(.horizontal, 12)
@@ -89,7 +91,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, minHeight: 200)
                 } else {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(store.ports.enumerated()), id: \.element.id) { index, port in
+                        ForEach(store.ports) { port in
                             let key = "\(port.proto):\(port.port)"
                             PortRow(
                                 port: port,
@@ -102,8 +104,7 @@ struct ContentView: View {
                                 onTrust: { promptTrust(port, key: key) },
                                 onUntrust: { store.untrust(key: key) }
                             )
-                            .id(key)
-                            if index < store.ports.count - 1 {
+                            if port.id != store.ports.last?.id {
                                 Divider()
                             }
                         }
@@ -113,8 +114,12 @@ struct ContentView: View {
             }
             .frame(maxHeight: .infinity)
             .onChange(of: store.focusedPortKey) { _, key in
-                guard let key else { return }
-                withAnimation { proxy.scrollTo(key, anchor: .center) }
+                guard let key,
+                      let target = store.ports.first(where: {
+                          "\($0.proto):\($0.port)" == key
+                      })
+                else { return }
+                withAnimation { proxy.scrollTo(target.id, anchor: .center) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     if store.focusedPortKey == key { store.focusedPortKey = nil }
                 }

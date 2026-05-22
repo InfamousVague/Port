@@ -33,6 +33,11 @@ public final class PortPaneProvider: NSObject, SuitePane {
     public func paneFocus(_ key: String) {
         store.focusedPortKey = key
     }
+
+    /// Trigger a scan from outside the pane (the widget's
+    /// RefreshPortIntent routes here via the host's IntentBus
+    /// registration).
+    public func paneRefresh() { store.refresh() }
 }
 
 @_cdecl("suitePaneCreate")

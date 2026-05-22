@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AppKit
+import PortShared
 
 struct OpenPort: Identifiable, Hashable {
     let proto: String      // "tcp" | "udp"
@@ -185,6 +186,32 @@ final class PortStore {
         }
         seenPortKeys = current
         firstScanDone = true
+        publishSharedSnapshot()
+    }
+
+    /// Publish a compact snapshot for the widget extension to read.
+    /// SharedPortStore writes the JSON to the Group Container and
+    /// kicks WidgetKit to reload its timeline.
+    private func publishSharedSnapshot() {
+        // Top processes by listening-port count.
+        var byProcess: [String: Int] = [:]
+        for p in ports {
+            byProcess[p.process, default: 0] += 1
+        }
+        let top = byProcess.sorted { $0.value > $1.value }
+            .prefix(3)
+            .map { SharedPort.ProcessRow(
+                name: $0.key, portCount: $0.value) }
+        let tcp = ports.filter { $0.proto == "tcp" }.count
+        let udp = ports.filter { $0.proto == "udp" }.count
+        let snapshot = SharedPort(
+            totalCount: ports.count,
+            tcpCount: tcp,
+            udpCount: udp,
+            topProcesses: Array(top),
+            sampledAt: Date()
+        )
+        SharedPortStore.write(snapshot)
     }
 
     // MARK: - Trust

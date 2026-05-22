@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import UserNotifications
 import PortPane
+import PortShared
 import SuiteKit
 
 // Standalone Port. Post-split this is just a host shim — the whole
@@ -19,18 +20,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
     UNUserNotificationCenterDelegate, NSPopoverDelegate
 {
     private let pane = PortPaneProvider()
-    private var statusItem: NSStatusItem!
+    // Optional — nil in merged-deferred mode (the launcher hosts the
+    // visible Port; this process exists only to handle widget
+    // AppIntents before exiting). showPopover() guards against nil.
+    private var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private var clickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        SuiteGuard.exitIfDeferring("port")
-
         NSApp.setActivationPolicy(.accessory)
 
-        statusItem = NSStatusBar.system.statusItem(
+        // Register IntentBus BEFORE deciding whether to defer. The
+        // widget's RefreshPortIntent declares openAppWhenRun = true,
+        // so the system dispatches `perform()` to this process
+        // shortly after this method returns. Hard-exiting via
+        // SuiteGuard first would silence the button.
+        IntentBus.shared.register { [weak self] in
+            self?.pane.paneRefresh()
+            self?.showPopover()
+        }
+        pane.paneStart()
+        UNUserNotificationCenter.current().delegate = self
+
+        if SuiteGuard.shouldDeferToHost("port") {
+            // Merged. No status item; stay alive long enough for any
+            // pending widget intent to fire (scanner is fast; 15s is
+            // comfortably more than a real scan needs).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                NSApp.terminate(nil)
+            }
+            return
+        }
+
+        let item = NSStatusBar.system.statusItem(
             withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
+        statusItem = item
+        if let button = item.button {
             button.image = pane.paneMenuBarImage()
             button.action = #selector(togglePopover(_:))
             button.target = self
@@ -41,9 +66,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         popover.behavior = .transient
         popover.delegate = self
         popover.contentViewController = vc
-
-        pane.paneStart()
-        UNUserNotificationCenter.current().delegate = self
     }
 
     @objc private func togglePopover(_ sender: Any?) {
@@ -52,7 +74,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
     }
 
     private func showPopover() {
-        guard let button = statusItem.button else { return }
+        // Nil in merged mode — bail silently. An intent that
+        // triggered our launch still gets to run its work via
+        // IntentBus before we exit.
+        guard let statusItem, let button = statusItem.button else {
+            return
+        }
         popover.show(relativeTo: button.bounds, of: button,
                      preferredEdge: .minY)
         if let win = popover.contentViewController?.view.window {

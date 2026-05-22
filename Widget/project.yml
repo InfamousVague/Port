@@ -1,0 +1,47 @@
+# xcodegen spec for the Port widget extension. Tiny Xcode subproject
+# that owns the WidgetKit appex; everything else stays in
+# Package.swift at the repo root. See Alfred/Widget/project.yml for
+# the same shape, full rationale (SR-14944 — SwiftPM has no
+# app-extension productType so ExtensionFoundation fatal-errors at
+# launch unless Xcode is the one building the appex).
+
+name: PortWidgets
+options:
+  bundleIdPrefix: com.mattssoftware.port
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+
+packages:
+  Port:
+    path: ..
+
+targets:
+  PortWidgets:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources
+    info:
+      path: Supporting Files/Info.plist
+      properties:
+        CFBundleDisplayName: Open Ports
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mattssoftware.port.widget
+        PRODUCT_NAME: PortWidgets
+        CODE_SIGN_ENTITLEMENTS: Supporting Files/PortWidgets.entitlements
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: F6ZAL7ANAD
+        MARKETING_VERSION: "0.2.0"
+        CURRENT_PROJECT_VERSION: "0.2.0"
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: Port
+        product: PortShared
