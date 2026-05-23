@@ -7,11 +7,6 @@ import PortShared
 struct SmallView: View {
     let entry: PortEntry
 
-    // Hardcoded blue (#0099ff range). Color.accentColor was
-    // resolving to white on the desktop widget surface in earlier
-    // Alfred testing, washing the pill into invisibility.
-    private let portBlue = Color(red: 0.36, green: 0.72, blue: 1.00)
-
     var body: some View {
         VStack(spacing: 6) {
             Spacer(minLength: 0)
@@ -42,18 +37,18 @@ struct SmallView: View {
 
             Spacer(minLength: 0)
 
+            // System `.bordered` — translucent gray pill, primary
+            // text. Was a hand-rolled blue capsule with explicit
+            // white text; that combo broke in the dimmed widget
+            // state on macOS Tahoe (system desaturates the blue to
+            // near-white, leaves the white text alone → illegible
+            // white-on-white). System bordered style stays legible
+            // across focus states and matches the family aesthetic.
             Button(intent: RefreshPortIntent()) {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Refresh")
-                }
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(portBlue, in: Capsule())
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .multilineTextAlignment(.center)

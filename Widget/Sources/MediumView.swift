@@ -7,8 +7,6 @@ import PortShared
 struct MediumView: View {
     let entry: PortEntry
 
-    private let portBlue = Color(red: 0.36, green: 0.72, blue: 1.00)
-
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
@@ -38,18 +36,14 @@ struct MediumView: View {
 
                 Spacer(minLength: 0)
 
+                // System `.bordered` — translucent gray pill, primary
+                // text. Replaces the hand-rolled blue capsule that
+                // was illegible in the dimmed widget state.
                 Button(intent: RefreshPortIntent()) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Refresh")
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(portBlue, in: Capsule())
+                    Label("Refresh", systemImage: "arrow.clockwise")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
 
             VStack(alignment: .leading, spacing: 4) {
