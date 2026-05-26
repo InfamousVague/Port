@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 APP="$ROOT/Port.app"
 SRC_ICON="$ROOT/art/AppIcon-source.png"
-VERSION="1.0.0"
+VERSION="1.0.1"
 # Same Developer ID as Blip ("Matt Wisniewski, F6ZAL7ANAD"). Override with
 # SIGN_IDENTITY=- for an ad-hoc local build.
 SIGN_IDENTITY="${SIGN_IDENTITY:-0948896DC970503ADEF5B5070E0BB3E9D9047757}"
