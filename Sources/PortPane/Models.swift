@@ -201,12 +201,12 @@ final class PortStore {
             SuiteLiveActivityStore.clear("port")
             return
         }
-        // `port.cleat` is a Halo-special name that maps to
-        // the bundled Port menu-bar glyph instead of an SF
-        // Symbol — keeps the island pill visually consistent
-        // with the menu-bar item the user already knows.
+        // `sailboat.fill` matches the SF Symbol Port already
+        // uses for its menu-bar item (`PortBrand.menuBarIcon`),
+        // so the island pill and the status item read as the
+        // same app at a glance.
         let payload = SuiteLiveActivityStore.Payload(
-            compactLeadingSymbol: "port.cleat",
+            compactLeadingSymbol: "sailboat.fill",
             compactTrailingText: "\(ports.count)",
             tintHex: "#2E9BD6",
             priority: 30)
