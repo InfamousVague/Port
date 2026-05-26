@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AppKit
+import SuiteKit
 import PortShared
 
 struct OpenPort: Identifiable, Hashable {
@@ -187,6 +188,25 @@ final class PortStore {
         seenPortKeys = current
         firstScanDone = true
         publishSharedSnapshot()
+        publishLiveActivity()
+    }
+
+    /// Surface Port's state in the system-wide island (Halo).
+    /// Two-state pill — count of listening ports + tint, or
+    /// withdrawn if nothing's listening so we don't waste the
+    /// slot. Priority 30 keeps us well below transient HUDs
+    /// and Espresso's countdown.
+    private func publishLiveActivity() {
+        if ports.isEmpty {
+            SuiteLiveActivityStore.clear("port")
+            return
+        }
+        let payload = SuiteLiveActivityStore.Payload(
+            compactLeadingSymbol: "network",
+            compactTrailingText: "\(ports.count)",
+            tintHex: "#2E9BD6",
+            priority: 30)
+        try? SuiteLiveActivityStore.write(payload, for: "port")
     }
 
     /// Publish a compact snapshot for the widget extension to read.
