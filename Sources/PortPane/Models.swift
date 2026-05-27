@@ -87,6 +87,22 @@ final class PortStore {
                 self?.refreshConnections()
             }
         }
+        // Halo's expanded-card "kill" button posts the pid as
+        // a String — listen and call through to the same
+        // `killByPid` path so the popover UI and the island
+        // share one terminate flow.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(
+                "com.mattssoftware.port.kill"),
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let pidString = note.object as? String,
+                  let pid = Int32(pidString) else { return }
+            Task { @MainActor in
+                self?.killByPid(pid)
+            }
+        }
         Task { await loadExternalIP() }
     }
 
@@ -230,11 +246,31 @@ final class PortStore {
         // uses for its menu-bar item (`PortBrand.menuBarIcon`),
         // so the island pill and the status item read as the
         // same app at a glance.
+        //
+        // Surface the top few listening ports too so Halo's
+        // expanded card can render rows with per-row kill
+        // buttons. Sort by port number (well-known ports rise
+        // to the top, where they're usually the ones the user
+        // wants to act on first), cap at 5 so the dropdown
+        // stays bounded.
+        let topEntries = ports
+            .sorted { $0.port < $1.port }
+            .prefix(5)
+            .map { p in
+                SuiteLiveActivityStore.PortEntry(
+                    proto: p.proto,
+                    port: p.port,
+                    pid: p.pid,
+                    process: p.process,
+                    service: KnownPorts.name(p.port))
+            }
         let payload = SuiteLiveActivityStore.Payload(
             compactLeadingSymbol: "sailboat.fill",
             compactTrailingText: "\(count)",
             tintHex: "#2E9BD6",
-            priority: 30)
+            priority: 30,
+            port: SuiteLiveActivityStore.PortData(
+                entries: Array(topEntries)))
         try? SuiteLiveActivityStore.write(payload, for: "port")
         // Bounce the fade timer — give the pill a fresh
         // window after each change so a flurry of opens /
@@ -310,6 +346,18 @@ final class PortStore {
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// Halo's expanded-card "kill" button posts the pid; we
+    /// look it up in the current ports list and reuse the
+    /// existing kill path so the popover and the island stay
+    /// in step (same error surface, same removal animation).
+    /// No-op if the pid is no longer listening — the row in
+    /// Halo is stale and will refresh on the next publish.
+    func killByPid(_ pid: Int32, force: Bool = false) {
+        guard let p = ports.first(where: { $0.pid == pid })
+        else { return }
+        kill(p, force: force)
     }
 
     func togglePause(_ p: OpenPort) {
