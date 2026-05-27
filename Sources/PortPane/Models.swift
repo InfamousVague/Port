@@ -251,11 +251,13 @@ final class PortStore {
         // expanded card can render rows with per-row kill
         // buttons. Sort by port number (well-known ports rise
         // to the top, where they're usually the ones the user
-        // wants to act on first), cap at 5 so the dropdown
-        // stays bounded.
+        // wants to act on first), cap at 6 so the dropdown
+        // fills its 2×3 grid exactly. More than 6 would push
+        // a fourth grid row past the comfortable expanded
+        // height; fewer leaves an empty cell.
         let topEntries = ports
             .sorted { $0.port < $1.port }
-            .prefix(5)
+            .prefix(6)
             .map { p in
                 SuiteLiveActivityStore.PortEntry(
                     proto: p.proto,
