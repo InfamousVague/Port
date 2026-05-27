@@ -51,6 +51,16 @@ final class PortStore {
     @ObservationIgnored private var firstScanDone = false
     @ObservationIgnored private let trustDefaultsKey = "trustedPorts.v1"
 
+    // Halo live-activity fade state. Port writes its pill
+    // only when the count just changed, then schedules a
+    // clear so the slot frees up after `haloFadeDelay` —
+    // pinning the pill permanently turned the island into a
+    // boring "you have 12 open ports" reminder rather than a
+    // transient ping when something opened or closed.
+    @ObservationIgnored private var lastPublishedCount: Int?
+    @ObservationIgnored private var haloFadeTimer: Timer?
+    @ObservationIgnored private let haloFadeDelay: TimeInterval = 5
+
     static let blipBundleID = "com.infamousvague.blip"
     // GitHub Pages mirror of the mattssoftware site (the custom domain is
     // served off-repo from a VPS — swap here if you want the apex domain).
@@ -191,26 +201,55 @@ final class PortStore {
         publishLiveActivity()
     }
 
-    /// Surface Port's state in the system-wide island (Halo).
-    /// Two-state pill — count of listening ports + tint, or
-    /// withdrawn if nothing's listening so we don't waste the
-    /// slot. Priority 30 keeps us well below transient HUDs
-    /// and Espresso's countdown.
+    /// Surface Port's state in the system-wide island (Halo)
+    /// as a **transient ping**: write the pill only when the
+    /// listening-port count just changed, then schedule a
+    /// `haloFadeDelay`-second clear so the slot disappears
+    /// instead of camping there forever. Restarts the fade
+    /// timer on every fresh change (rapid open/close churn
+    /// extends visibility until things settle).
+    ///
+    /// Priority 30 keeps the pill well below transient HUDs
+    /// and Espresso's countdown when other activities are
+    /// competing for the slot.
     private func publishLiveActivity() {
-        if ports.isEmpty {
+        let count = ports.count
+        if count == 0 {
             SuiteLiveActivityStore.clear("port")
+            lastPublishedCount = 0
+            haloFadeTimer?.invalidate()
+            haloFadeTimer = nil
             return
         }
+        // No change since the last publish → leave whatever
+        // we wrote alone (it's either still on screen if the
+        // fade timer hasn't fired yet, or already gone).
+        guard count != lastPublishedCount else { return }
+        lastPublishedCount = count
         // `sailboat.fill` matches the SF Symbol Port already
         // uses for its menu-bar item (`PortBrand.menuBarIcon`),
         // so the island pill and the status item read as the
         // same app at a glance.
         let payload = SuiteLiveActivityStore.Payload(
             compactLeadingSymbol: "sailboat.fill",
-            compactTrailingText: "\(ports.count)",
+            compactTrailingText: "\(count)",
             tintHex: "#2E9BD6",
             priority: 30)
         try? SuiteLiveActivityStore.write(payload, for: "port")
+        // Bounce the fade timer — give the pill a fresh
+        // window after each change so a flurry of opens /
+        // closes keeps it visible until the dust settles.
+        haloFadeTimer?.invalidate()
+        haloFadeTimer = Timer.scheduledTimer(
+            withTimeInterval: haloFadeDelay,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                SuiteLiveActivityStore.clear("port")
+                self.haloFadeTimer = nil
+            }
+        }
     }
 
     /// Publish a compact snapshot for the widget extension to read.
